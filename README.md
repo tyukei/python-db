@@ -17,5 +17,7 @@ python <各フォルダー>/main.py
 
 ## デモ動画
 ### CREAT TABLEとINSERTとSELECTの例
+![image](https://github.com/user-attachments/assets/d9a890eb-74de-4f9e-870a-8480d520a4d4)
+
 https://github.com/user-attachments/assets/7b710bfc-f9d0-4eb1-8f31-2acaed6a1633
 
