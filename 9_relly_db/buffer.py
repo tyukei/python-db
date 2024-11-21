@@ -133,7 +133,7 @@ if __name__ == "__main__":
 
     try:
         disk = DiskManager.open(temp_file_path)
-        pool = BufferPool(10)  # バッファプールのサイズを増やす
+        pool = BufferPool(1000)  # バッファプールのサイズを増やす
         bufmgr = BufferPoolManager(disk, pool)
 
         hello = bytearray(b"hello" + b"\x00" * (PAGE_SIZE - 5))

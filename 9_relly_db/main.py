@@ -24,7 +24,11 @@ def main():
         btree.insert(bufmgr, struct.pack('>Q', 3), b"hello")
         btree.insert(bufmgr, struct.pack('>Q', 8), b"!")
         btree.insert(bufmgr, struct.pack('>Q', 4), b",")
-        
+        btree.insert(bufmgr, struct.pack('>Q', 1), b"12345")
+        # btree.insert(bufmgr, struct.pack('>Q', 7), b"zzzz")
+        # btree.insert(bufmgr, struct.pack('>Q', 2), b"abcde")  
+        # btree.insert(bufmgr, struct.pack('>Q', 5), b"hi")  
+        # btree.insert(bufmgr, struct.pack('>Q', 9), b"goodbye")                        
         # データをフラッシュ
         bufmgr.flush()
         
