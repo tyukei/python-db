@@ -1,6 +1,6 @@
-from btree import BtreePlus  # BtreeをBtreePlusに変更しました
-from buffer import BufferPoolManager
-from disk import PageId
+from buffer import BufferPool, BufferPoolManager
+from disk import DiskManager, PageId
+from btree import BPlusTree, SearchMode
 import tuple
 
 # SimpleTableクラスは、簡単なテーブルの管理を行います。
@@ -21,24 +21,22 @@ class SimpleTable:
         
         :param bufmgr: バッファプールマネージャーのインスタンス
         """
-        btree = BtreePlus.create(bufmgr)
+        btree = BPlusTree.create(bufmgr)
         self.meta_page_id = btree.meta_page_id
 
-    def insert(self, bufmgr: BufferPoolManager, record: list[bytes]) -> None:
+    def insert(self, bufmgr: BufferPoolManager, record: list[list[bytes]]) -> None:
         """
         レコードをテーブルに挿入します。
         
         :param bufmgr: バッファプールマネージャーのインスタンス
         :param record: 挿入するレコードのリスト
         """
-        btree = BtreePlus(self.meta_page_id)
-            key = bytearray()
+        btree = BPlusTree(self.meta_page_id)
+        key = []
         tuple.encode(record[:self.num_key_elems], key)
-            value = bytearray()
+        value = []
         tuple.encode(record[self.num_key_elems:], value)
         btree.insert(bufmgr, key, value)
-        for unique_index in self.unique_indices:
-            unique_index.insert(bufmgr, key, record)
 
 # UniqueIndexクラスは、一意のインデックスを管理します。
 class UniqueIndex:
@@ -58,7 +56,7 @@ class UniqueIndex:
         
         :param bufmgr: バッファプールマネージャーのインスタンス
         """
-        btree = BtreePlus.create(bufmgr)
+        btree = BPlusTree.create(bufmgr)
         self.meta_page_id = btree.meta_page_id
 
     def insert(self, bufmgr: BufferPoolManager, pkey: bytes, record: list[bytes]) -> None:
@@ -69,7 +67,7 @@ class UniqueIndex:
         :param pkey: プライマリキー
         :param record: 挿入するレコードのリスト
         """
-        btree = BtreePlus(self.meta_page_id)
+        btree = BPlusTree(self.meta_page_id)
         skey = []
         tuple.encode([record[index] for index in self.skey], skey)
         btree.insert(bufmgr, skey, pkey)
@@ -94,19 +92,19 @@ class Table:
         
         :param bufmgr: バッファプールマネージャーのインスタンス
         """
-        btree = BtreePlus.create(bufmgr)
+        btree = BPlusTree.create(bufmgr)
         self.meta_page_id = btree.meta_page_id
         for unique_index in self.unique_indices:
             unique_index.create(bufmgr)
 
-    def insert(self, bufmgr: BufferPoolManager, record: list[bytes]) -> None:
+    def insert(self, bufmgr: BufferPoolManager, record: list[list[bytes]]) -> None:
         """
         レコードをテーブルとその一意のインデックスに挿入します。
         
         :param bufmgr: バッファプールマネージャーのインスタンス
         :param record: 挿入するレコードのリスト
         """
-        btree = BtreePlus(self.meta_page_id)
+        btree = BPlusTree(self.meta_page_id)
         key = []
         tuple.encode(record[:self.num_key_elems], key)
         value = []
@@ -115,40 +113,40 @@ class Table:
         for unique_index in self.unique_indices:
             unique_index.insert(bufmgr, key, record)
 
-    # 以下にテスト関数を追加します。
-    
-    def main() -> None:
-        """
-        テーブルの作成とレコードの挿入をテストします。
-        """
-        try:
-            # ディスクマネージャを初期化
-            disk = DiskManager.open("simple.rly")
-            # バッファプールを作成
-            pool = BufferPool(10)
-            
-            # バッファプールマネージャを作成
-            bufmgr = BufferPoolManager(disk, pool)
-            
-            # SimpleTableのインスタンスを作成します。
-            table = SimpleTable(meta_page_id=PageId(0), num_key_elems=1)
-            
-            # テーブルを作成します。
-            table.create(bufmgr)
-            print(table)
-            
-            # 複数のレコードをテーブルに挿入します。
-            table.insert(bufmgr, [b"z", b"Alice", b"Smith"])
-            table.insert(bufmgr, [b"x", b"Bob", b"Johnson"])
-            table.insert(bufmgr, [b"y", b"Charlie", b"Williams"])
-            table.insert(bufmgr, [b"w", b"Dave", b"Miller"])
-            table.insert(bufmgr, [b"v", b"Eve", b"Brown"])
-            
-            # バッファをフラッシュします。
-            bufmgr.flush()
+# 以下にテスト関数を追加します。
+
+def main() -> None:
+    """
+    テーブルの作成とレコードの挿入をテストします。
+    """
+    try:
+        # ディスクマネージャを初期化
+        disk = DiskManager.open("simple.rly")
+        # バッファプールを作成
+        pool = BufferPool(10)
         
-        except Exception as e:
-            print(f"エラーが発生しました: {e}")
+        # バッファプールマネージャを作成
+        bufmgr = BufferPoolManager(disk, pool)
+        
+        # SimpleTableのインスタンスを作成します。
+        table = SimpleTable(meta_page_id=PageId(0), num_key_elems=1)
+        
+        # テーブルを作成します。
+        table.create(bufmgr)
+        print(table)
+        
+        # 複数のレコードをテーブルに挿入します。
+        table.insert(bufmgr, [b"z", b"Alice", b"Smith"])
+        table.insert(bufmgr, [b"x", b"Bob", b"Johnson"])
+        table.insert(bufmgr, [b"y", b"Charlie", b"Williams"])
+        table.insert(bufmgr, [b"w", b"Dave", b"Miller"])
+        table.insert(bufmgr, [b"v", b"Eve", b"Brown"])
+        
+        # バッファをフラッシュします。
+        bufmgr.flush()
     
-    if __name__ == "__main__":
-        main()
+    except Exception as e:
+        print(f"エラーが発生しました: {e}")
+
+if __name__ == "__main__":
+    main()
