@@ -53,7 +53,28 @@ class SimpleTable:
         value = bytes(value)
         btree.insert(bufmgr=bufmgr, key=key, value=value)
         print(f"Record before encoding: {record}")
+        
+    def show(self,bufmgr: BufferPoolManager):
+        try:            
+            btree = BPlusTree(self.meta_page_id)
+            print("ok1")
+            iter = btree.search(bufmgr, SearchMode.START)
+            print("ok2")
 
+            while True:
+                result = iter.next(bufmgr)
+                if result is None:
+                    break
+
+                key, value = result
+                record = []
+                tuple.decode(key, record)
+                tuple.decode(value, record)
+                print(tuple.Pretty(record))
+            return True
+            
+        except Exception as e:
+            print(f"Error: {e}")
 
 
         
@@ -91,6 +112,27 @@ class UniqueIndex:
         skey = []
         tuple.encode([record[index] for index in self.skey], skey)
         btree.insert(bufmgr, skey, pkey)
+    
+    def show(self,bufmgr: BufferPoolManager):
+        try:            
+            btree = BPlusTree(self.meta_page_id)
+            iter = btree.search(bufmgr, SearchMode.START)
+            while True:
+                result = iter.next(bufmgr)
+                if result is None:
+                    break
+                    
+                key, value = result
+                record = []
+                tuple.decode(key, record)
+                tuple.decode(value, record)
+                print(tuple.Pretty(record))
+            return True
+            
+        except Exception as e:
+            print(f"Error: {e}")
+
+
 
 # Tableクラスは、複数のUniqueIndexを持つテーブルを管理します。
 class Table:
@@ -163,7 +205,10 @@ def main() -> None:
         table.insert(bufmgr, [b"v", b"Eve", b"Brown"])
         
         # バッファをフラッシュします。
+
         bufmgr.flush()
+        print("test")
+        table.show(bufmgr)
     
     except Exception as e:
         print(f"エラーが発生しました: {e}")
