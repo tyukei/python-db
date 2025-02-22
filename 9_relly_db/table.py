@@ -3,6 +3,13 @@ from disk import DiskManager, PageId
 from btree import BPlusTree, SearchMode
 import tuple
 
+"""
+tableとは: テーブルは、データベースの中でデータを格納するための構造です。
+プライマリーキーをキーとし、その他のデータを値としてb+treeに格納します。
+なぜ使うか:
+
+"""
+
 # SimpleTableクラスは、簡単なテーブルの管理を行います。
 # このクラスは、テーブルの作成、レコードの挿入を行います。
 class SimpleTable:
@@ -39,8 +46,17 @@ class SimpleTable:
         tuple.encode(record[self.num_key_elems:], value)
         if not all(isinstance(item, bytes) for item in record):
             raise ValueError("All elements in the record must be of type bytes.")
-        
+        print(f"1key type is {type(key)}:{key}")
+        # change list to bytes
+        key = bytes(key)
+        print(f"2key type is {type(key)}:{key}")
+        value = bytes(value)
+        btree.insert(bufmgr=bufmgr, key=key, value=value)
         print(f"Record before encoding: {record}")
+
+
+
+        
 
 # UniqueIndexクラスは、一意のインデックスを管理します。
 class UniqueIndex:

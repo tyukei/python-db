@@ -2,52 +2,63 @@ import sys
 from buffer import BufferPool, BufferPoolManager
 from disk import DiskManager, PageId
 from btree import BPlusTree, SearchMode
+from table import SimpleTable  # SimpleTableをインポート
 import struct
+
+def test_table(bufmgr):
+    """
+    テーブルの作成とレコードの挿入をテストします。
+    """
+    # SimpleTableのインスタンスを作成します。
+    table = SimpleTable(meta_page_id=PageId(0), num_key_elems=1)
+    
+    # テーブルを作成します。
+    table.create(bufmgr)
+    print("テーブルが作成されました。")
+    
+    # 複数のレコードをテーブルに挿入します。
+    records = [
+        [b"z", b"Alice", b"Smith"],
+        [b"x", b"Bob", b"Johnson"],
+        [b"y", b"Charlie", b"Williams"],
+        [b"w", b"Dave", b"Miller"],
+        [b"v", b"Eve", b"Brown"]
+    ]
+    
+    for record in records:
+        table.insert(bufmgr, record)
+        print(f"レコードを挿入しました: {record}")
 
 def main():
     try:
         # ディスクマネージャを初期化
         disk = DiskManager.open("simple.rly")
-        
         # バッファプールを作成
         pool = BufferPool(10)
         
         # バッファプールマネージャを作成
         bufmgr = BufferPoolManager(disk, pool)
         
-        # BTreeを作成
-        btree = BPlusTree.create(bufmgr)
+        # SimpleTableのインスタンスを作成します。
+        table = SimpleTable(meta_page_id=PageId(0), num_key_elems=1)
         
-        # データを挿入
-        print("Inserting data...")
-        btree.insert(bufmgr, struct.pack('>Q', 1), b"one")
-        btree.insert(bufmgr, struct.pack('>Q', 4), b"two")
-        btree.insert(bufmgr, struct.pack('>Q', 6), b"three")
-        btree.insert(bufmgr, struct.pack('>Q', 3), b"four")
-        btree.insert(bufmgr, struct.pack('>Q', 7), b"five")
-        btree.insert(bufmgr, struct.pack('>Q', 2), b"six")
-        btree.insert(bufmgr, struct.pack('>Q', 5), b"seven")                       
-        # データをフラッシュ
-        bufmgr.flush()
+        # テーブルを作成します。
+        table.create(bufmgr)
+        print(table)
         
-        # データを検索
-        print("Searching data...")
-        result = btree.search(bufmgr, SearchMode.Key(struct.pack('>Q', 3)))
-        if result:  # 検索結果がある場合のみ処理
-            key, value = result  # タプルをアンパック
-            print(f"Key: {struct.unpack('>Q', key)[0]}, Value: {value.decode()}")
-        else:
-            print("Key not found.")
-
-        result = btree.search(bufmgr, SearchMode.Key(struct.pack('>Q', 8)))
-        if result:  # 検索結果がある場合のみ処理
-            key, value = result  # タプルをアンパック
-            print(f"Key: {struct.unpack('>Q', key)[0]}, Value: {value.decode()}")
-        else:
-            print("Key not found.")
+        # # 複数のレコードをテーブルに挿入します。
+        # table.insert(bufmgr, [b"z", b"Alice", b"Smith"])
+        # table.insert(bufmgr, [b"x", b"Bob", b"Johnson"])
+        # table.insert(bufmgr, [b"y", b"Charlie", b"Williams"])
+        # table.insert(bufmgr, [b"w", b"Dave", b"Miller"])
+        # table.insert(bufmgr, [b"v", b"Eve", b"Brown"])
         
+        # # バッファをフラッシュします。
+        # bufmgr.flush()
+    
     except Exception as e:
-        print(f"An error occurred: {e}", file=sys.stderr)
+        print(f"エラーが発生しました: {e}")
 
 if __name__ == "__main__":
     main()
+
