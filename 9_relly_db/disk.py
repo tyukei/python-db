@@ -116,7 +116,7 @@ if __name__ == "__main__":
         disk = DiskManager.open(temp_file_path)
         
         # "hello"と"world"のデータを準備
-        hello = bytearray(b"hello" + b"\x00" * (PAGE_SIZE - 5))
+        hello = bytearray(b"hello" + b"\x00" * (PAGE_SIZE - 5)) # b""は文字列をバイト列に変換する。b"\x00"はNULL文字
         world = bytearray(b"world" + b"\x00" * (PAGE_SIZE - 5))
 
         # ページを割り当ててデータを書き込む
