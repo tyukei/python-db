@@ -5,6 +5,16 @@ from disk import PageId, PAGE_SIZE
 import pickle
 import os
 
+
+"""
+btree+とは: 平衡N分木に分類されるデータ構造
+N分木とは: 1つのノードにN個の子ノードを持つ木構造(N=2の場合は2分木、N=3の場合は3分木)
+平衡木とは: 木構造の深さが最小になるように(木の高さが同じになるように)データを挿入、削除することで、データの検索、挿入、削除の効率を向上させることができる木構造
+何で使うか: データをより効率的に検索、挿入、削除するため
+RDBMSにとって都合の良いデータ向上だから。1つのノードを1つのページに対応づけている。検索時に、読み込むページ数が対応オーダになり、ディスクアクセスが減るため
+挿入、検索、削除とも計算量がO(logN)の理由: 平衡木の場合、木の高さがlogNになるため。ただし、挿入手順が複雑で、計算量のオーダは同じでも、検索より計算時間は定数倍かかる場合がある
+"""
+
 # 例外クラス定義
 class BTreeError(Exception):
     """B+ツリーに関連する基本的な例外クラス"""
@@ -106,24 +116,24 @@ class BPlusTree:
             BPlusTree: 作成されたB+ツリーのインスタンス
         """
         # メタデータとルートノードの作成
-        meta_buffer = bufmgr.create_page()  # メタデータページを新規作成
+        meta_buffer = bufmgr.create_page()  # メタデータページを新規作成、メタデータページとは、B+ツリーの情報を格納するページ
         root_buffer = bufmgr.create_page()  # ルートノードページを新規作成
 
         # ルートノードをリーフノードとして初期化
-        root_buffer.page[:4] = struct.pack('>I', NodeType.LEAF)  # ノードタイプをリーフに設定
-        root_buffer.page[4:8] = struct.pack('>I', 0)  # ペア数を0に初期化
+        root_buffer.page[:4] = struct.pack('>I', NodeType.LEAF)  # ノードタイプをリーフに設定。 pack: データをバイト列に変換する。I:符号なし整数 => NodeType.LEAF (= 0)をバイト列(=0x00 0x00 0x00 0x00)に変換
+        root_buffer.page[4:8] = struct.pack('>I', 0)  # ペア数(1つのノードに何個key-valueペアがあるか)を0に設定
 
         # メタデータページにルートノードのページIDを保存
         meta_buffer.page[:8] = root_buffer.page_id.to_bytes()
 
-        # バッファのダーティフラグを設定（変更があったことを示す）
+        # バッファのダーティフラグを設定（変更があったことを示す）=> バッファ内のデータがディスクに書き込まれていないことを示す
         meta_buffer.is_dirty = True
         root_buffer.is_dirty = True
 
         # 新しいB+ツリーのインスタンスを返す
         return BPlusTree(meta_page_id=meta_buffer.page_id)
 
-    def fetch_root_page(self, bufmgr: BufferPoolManager) -> Buffer:
+    def fetch_root_page(self, bufmgr: BufferPoolManager) -> Buffer: # meta_buffer.page[:8] = root_buffer.page_id.to_bytes() で保存したroot_buffer.page_idを取得する
         """
         ルートページを取得する
 
@@ -133,8 +143,8 @@ class BPlusTree:
         Returns:
             Buffer: ルートページのバッファ
         """
-        meta_buffer = bufmgr.fetch_page(self.meta_page_id)  # メタデータページを取得
-        root_page_id = PageId.from_bytes(meta_buffer.page[:8])  # メタデータからルートページIDを読み取る
+        meta_buffer = bufmgr.fetch_page(self.meta_page_id)  # メタデータページを取得　(メタページとは、B+ツリーの情報を格納するページ)
+        root_page_id = PageId.from_bytes(meta_buffer.page[:8])  # メタデータからルートページIDを読み取る,最初の8バイト
         return bufmgr.fetch_page(root_page_id)  # ルートページのバッファを返す
 
     def search(self, bufmgr: BufferPoolManager, search_mode: SearchMode) -> Optional[Tuple[bytes, bytes]]:
@@ -226,7 +236,7 @@ class BPlusTree:
             Optional[Tuple[bytes, PageId]]: 分割が発生した場合、昇格したキーと新しいページIDのタプル。それ以外はNone
         """
         # ノードタイプを読み取る（リーフノード=0、ブランチノード=1）
-        node_type = struct.unpack('>I', node_buffer.page[:4])[0]
+        node_type = struct.unpack('>I', node_buffer.page[:4])[0] # ページの最初の4バイトに、ノードタイプが格納されている
 
         if node_type == NodeType.LEAF:
             # リーフノードの場合、ペアを取得
@@ -238,9 +248,9 @@ class BPlusTree:
                     raise DuplicateKeyError("Duplicate key")
 
             # 新しいペアを追加
-            pairs.append(Pair(key, value))
+            pairs.append(Pair(key, value)) #parisはlistなので、appendで追加
             # キーの昇順にソート
-            pairs.sort(key=lambda p: p.key)
+            pairs.sort(key=lambda p: p.key) #sortはlistのメソッド。key引数に指定した関数でソートする。ここでは、ペアのキーでソートしている.
 
             if len(pairs) <= self.LEAF_NODE_MAX_PAIRS:
                 # オーバーフローしない場合、リーフノードを更新
