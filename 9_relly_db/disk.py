@@ -2,11 +2,20 @@ import os
 import struct
 from typing import Optional
 
+"""
+DiskManagerとは: ディスク上のページを管理するクラス
+DiskManagerの目的: データをディスクに永続化する
+なぜDiskManagerを使うか: アプリを終了しても、データを保持したい
+どうやって: ヒープファイルを使ってデータを永続化する
+ヒープファイルとは: データを自由に読み書きできるファイル
+なぜヒープファイルを使う: ファイルに読み書きする時、ファイルシステムがHDD, SSDにアクセスするが、ブロックという単位(4kbが多い)でアクセスする。
+ファイルシステムが勝手にブロックサイズに切り上げてしまうため、データが小さい場合、無駄が生じる。
+(分からないこと:逆に、データが大きい場合、ブロックサイズに収まらない場合、複数のブロックに分割され、データの整合性が取れなくなる可能性がある?)
+どうやってヒープファイルを使う: ページIDを使ってデータを読み書きする。ポインタ、配列みたいなイメージ
+ページとは: データを読み書きする単位。4096バイトの正数倍(1~4倍)が多い。
+なぜ4kBのページサイズ: Linuxで使われるファイルシステム(ext4)のデフォルトのブロックサイズが4kBだから。
+"""
 
-# 4kBのページサイズ
-# ハードウェア: メモリ管理ユニット（MMU）が4キロバイトのページサイズをサポート
-# OS: Linux、Windows、macOSなどの主要なOSは、デフォルトで4キロバイトのページサイズを使用しています
-# メモリ:ページサイズが小さすぎると、オーバーヘッドが大きくなります。一方、ページサイズが大きすぎると、メモリの無駄が増えます
 PAGE_SIZE = 4096
 
 class PageId:
@@ -16,11 +25,11 @@ class PageId:
     def __init__(self, page_id: int):
         self.page_id = page_id
 
-    # ページIDが有効かどうか
-    def valid(self) -> Optional['PageId']:
-        if self.page_id == PageId.INVALID_PAGE_ID:
-            return None
-        return self
+    # # ページIDが有効かどうか
+    # def valid(self) -> Optional['PageId']:
+    #     if self.page_id == PageId.INVALID_PAGE_ID:
+    #         return None
+    #     return self
 
     # ページIDを64ビットの整数として返す
     def to_u64(self) -> int:
@@ -53,7 +62,7 @@ class PageId:
 class DiskManager:
     # ヒープファイル(自由に読み書きできるファイル)を指定してDiskManagerを作成
     # 次に使用するページIDを設定
-    def __init__(self, heap_file: str):
+    def __init__(self, heap_file: str): 
         self.heap_file = heap_file
         self.file = open(heap_file, 'r+b')
         self.file.seek(0, os.SEEK_END) #　ファイルの0バイト目からファイルの最後まで移動
