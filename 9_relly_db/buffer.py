@@ -4,46 +4,46 @@ from collections import defaultdict
 from typing import Dict, Optional, Tuple
 from disk import DiskManager, PageId, PAGE_SIZE
 
-#------------------------------------------------------------------------------
-# バッファ関連の例外クラス
-#------------------------------------------------------------------------------
 
+"""
+バッファプールとは: ページのデータ(読み書きするデータ)を保持するメモリ領域
+バッファプールの目的: ディスクアクセスを効率化するために、ディスクから読み込んだページをメモリ上に保持しておく
+なぜ: ディスクアクセスはメモリアクセスよりも遅いため、ディスクアクセスを減らすことでパフォーマンス向上が期待できる
+ファイルシステムのキャッシュ機能を使えばいい？: それでも良い、しかしファイルシステムのキャッシュを無効にしRDBMSの独自のタイミングを使用する方が賢い場合もあるため、多くのRDBMSは独自のバッファプールを持っている
+(わからないこと: DiskMagerでは、このファイルシステムのブロックサイズが4kbだったことで、ページサイズも4kbにしていたが、もしファイルシステムを使わないのなら、ブロックサイズを4kbにしなくてもいいのでは？)
+どうやってメモリ上に保持するか: バッファは複数あり、ディスクマネージャから読み込んだページをバッファに格納する。どのページがどのバッファに格納されているかは、PageIdとBufferIdのマッピングテーブルしたページテーブルで管理する
+"""
+
+
+# バッファ関連の例外クラス
 class BufferError(Exception):
     """バッファプール関連で起こる一般的なエラーの基底クラス"""
     pass
+
 
 class NoFreeBufferError(BufferError):
     """バッファプール内に空きフレームが無い場合に送出される例外"""
     pass
 
 
-#------------------------------------------------------------------------------
 # バッファプール内部で使用するID関連クラス
-#------------------------------------------------------------------------------
-
 class BufferId:
     """
     バッファプールの中のフレームを識別するID。
     例えば buffer_id=0 は「0番目のフレーム」を表す。
     """
-    def __init__(self, buffer_id: int):
+    def __init__(self, buffer_id: int): # バッファIDを初期化
         self.buffer_id = buffer_id
 
-    def __eq__(self, other):
-        """
-        比較演算子==を使ったときの判定を定義。
-        同じbuffer_idであれば同一として扱う。
-        """
+    def __eq__(self, other): # バッファIDが等しいかどうかを比較.
         if isinstance(other, BufferId):
             return self.buffer_id == other.buffer_id
         return False
 
-    def __hash__(self):
-        """ハッシュ値を返す。辞書などで使えるように定義してある。"""
+    def __hash__(self): # ハッシュ値を返す
         return hash(self.buffer_id)
 
-    def __repr__(self):
-        """オブジェクトの文字列表現を返す。"""
+    def __repr__(self): # デバッグ用に文字列表現を返す
         return f"BufferId({self.buffer_id})"
 
 
@@ -56,7 +56,7 @@ class Buffer:
     """
     def __init__(self, page_id: PageId):
         self.page_id = page_id               # ディスク上のページID
-        self.page = bytearray(PAGE_SIZE)     # ページサイズ分のバッファ領域
+        self.page = bytearray(PAGE_SIZE)     # ページサイズ分のバッファ領域確保。ここにデータを読み書きする
         self.is_dirty = False                # 変更があった場合 True
 
 
@@ -70,16 +70,11 @@ class Frame:
         self.buffer = buffer   # 実際のページデータを保持する Buffer オブジェクト
 
 
-#------------------------------------------------------------------------------
-# バッファプール (フレーム配列) を管理するクラス
-#------------------------------------------------------------------------------
-
+# バッファプール (フレーム配列) を管理するクラス=> 複数のフレームを管理する => 複数のバッファを管理する => 複数のページを管理する
 class BufferPool:
     """
-    バッファプールの実体。pool_size 個の Frame を用意し、
-    それらをリストで保持する。
-    また、next_victim_id を持ち、バッファ置換の際に
-    次に探すフレームIDを追跡する。
+    バッファプールの実体。pool_size 個の Frame を用意し、リストで保持する。
+    また、next_victim_id を持ち、バッファ置換の際に次に探すフレームIDを追跡する。
     """
     def __init__(self, pool_size: int):
         # INVALID_PAGE_IDを持つ Buffer をフレームに詰めて pool_size 個用意
@@ -91,8 +86,9 @@ class BufferPool:
         """バッファプールのフレーム数を返す。"""
         return len(self.buffers)
 
-    def evict(self) -> Optional[BufferId]:
+    def evict(self) -> Optional[BufferId]: # Clock-sweep(PostgresSQLにも採用されているアルゴリズム)を利用して、捨てるBuffer IDを返す
         """
+        バッファプール内のすべてのフレームを調べ、捨てるバッファを見つける。
         置換対象 (victim) のフレームを探す。
         usage_count == 0 のフレームがあればそれを返し、
         なければ is_dirty のフレームの usage_count を減らしながら再試行する。
@@ -101,7 +97,7 @@ class BufferPool:
         pool_size = self.size()
         consecutive_pinned = 0  # usage_count > 0 のフレームが連続何個出たか
 
-        while True:
+        while True: # バッファプール内のすべてのフレームを調べ、捨てるバッファを見つけるための巡回
             frame = self.buffers[self.next_victim_id.buffer_id]
 
             # usage_count == 0 の場合はこのフレームを返して置換に使う
