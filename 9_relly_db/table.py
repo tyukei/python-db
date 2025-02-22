@@ -4,6 +4,7 @@ from btree import BPlusTree, SearchMode
 import tuple
 
 # SimpleTableクラスは、簡単なテーブルの管理を行います。
+# このクラスは、テーブルの作成、レコードの挿入を行います。
 class SimpleTable:
     def __init__(self, meta_page_id: PageId = None, num_key_elems: int = 0):
         """
@@ -36,7 +37,10 @@ class SimpleTable:
         tuple.encode(record[:self.num_key_elems], key)
         value = []
         tuple.encode(record[self.num_key_elems:], value)
-        btree.insert(bufmgr, key, value)
+        if not all(isinstance(item, bytes) for item in record):
+            raise ValueError("All elements in the record must be of type bytes.")
+        
+        print(f"Record before encoding: {record}")
 
 # UniqueIndexクラスは、一意のインデックスを管理します。
 class UniqueIndex:
@@ -109,7 +113,7 @@ class Table:
         tuple.encode(record[:self.num_key_elems], key)
         value = []
         tuple.encode(record[self.num_key_elems:], value)
-        btree.insert(bufmgr, key, value)
+        btree.insert(bufmgr, bytes(key), bytes(value))
         for unique_index in self.unique_indices:
             unique_index.insert(bufmgr, key, record)
 
