@@ -17,82 +17,60 @@ class SimpleTable:
     def __init__(self, meta_page_id: PageId = None, num_key_elems: int = 0):
         """
         SimpleTableのコンストラクタ。
-        
+
         :param meta_page_id: メタページのID
-        :param num_key_elems: キーとして使用する要素の数
+        :param num_key_elems: キーとして使用する要素数
         """
         self.meta_page_id = meta_page_id
         self.num_key_elems = num_key_elems
-        self.btree = None  # Initialize btree attribute
+        self.btree = None  # 後で B+Tree インスタンスを格納
 
     def create(self, bufmgr: BufferPoolManager) -> None:
         """
-        テーブルを作成し、BtreePlusを初期化します。
-        
-        :param bufmgr: バッファプールマネージャーのインスタンス
+        テーブル作成。B+Tree を初期化して self.btree に保持する。
         """
-        self.btree = BPlusTree.create(bufmgr)  # Create BPlusTree instance with bufmgr
+        self.btree = BPlusTree.create(bufmgr)
         self.meta_page_id = self.btree.meta_page_id
 
-    def insert(self, bufmgr: BufferPoolManager, record: list[list[bytes]]) -> None:
+    def insert(self, bufmgr: BufferPoolManager, record: list[bytes]) -> None:
         """
-        レコードをテーブルに挿入します。
-        
-        :param bufmgr: バッファプールマネージャーのインスタンス
-        :param record: 挿入するレコードのリスト
+        レコードをテーブルに挿入する。
+
+        :param record: キー部と値部のバイト列リスト（例: [b"z", b"Alice", b"Smith"]）
         """
-        btree = self.btree  # Reference to the BPlusTree instance
+        btree = self.btree
         key = []
         tuple.encode(record[:self.num_key_elems], key)
         value = []
         tuple.encode(record[self.num_key_elems:], value)
         if not all(isinstance(item, bytes) for item in record):
             raise ValueError("All elements in the record must be of type bytes.")
-        
-        # Ensure the key is packed correctly
-        key = bytes(key)  # Decode the first element from bytes to string and convert to int
+        key = bytes(key)
         value = bytes(value)
-        
         btree.insert(bufmgr=bufmgr, key=key, value=value)
         
     def show(self, bufmgr: BufferPoolManager):
-        try:            
+        try:
             btree = self.btree
-            root_page = btree.fetch_root_page(bufmgr)
-            root_page_id = struct.pack('>Q', root_page.page_id.to_u64())
-            
-            # 検索モードを設定して検索を開始
-            iter = btree.search(bufmgr, SearchMode.Key(root_page_id))
-
-            if iter is None:
-                print("Iterator is None")
+            # 全件走査のため、全てのキーが含まれる範囲を指定（ここでは空文字～大きな値）
+            results = btree.search_range(bufmgr, b'', b'\xff' * 16)
+            if not results:
+                print("No records found.")
             else:
-                print(f"Iterator type: {type(iter)}")
-
-            while iter is not None:
-                result = iter.next(bufmgr)
-                if result is None:
-                    print("No more results")
-                    break
-
-                key, value = result
-                record = []
-                tuple.decode(key, record)
-                tuple.decode(value, record)
-                print(tuple.Pretty(record))
+                for key, value in results:
+                    record = []
+                    tuple.decode(key, record)
+                    tuple.decode(value, record)
+                    print(tuple.Pretty(record))
             return True
-            
         except Exception as e:
             print(f"Error: {e}")
 
-# UniqueIndexクラスは、一意のインデックスを管理します。
 class UniqueIndex:
     def __init__(self, meta_page_id: PageId = None, skey: list[int] = None):
         """
-        UniqueIndexのコンストラクタ。
-        
         :param meta_page_id: メタページのID
-        :param skey: インデックスとして使用するキーのインデックスリスト
+        :param skey: インデックスとして使用するフィールドのインデックスリスト
         """
         self.meta_page_id = meta_page_id
         self.skey = skey or []
@@ -100,60 +78,46 @@ class UniqueIndex:
 
     def create(self, bufmgr: BufferPoolManager) -> None:
         """
-        一意のインデックスを作成し、BtreePlusを初期化します。
-        
-        :param bufmgr: バッファプールマネージャーのインスタンス
+        一意のインデックス作成。B+Tree を生成して self.btree に保持する。
         """
-        btree = BPlusTree.create(bufmgr)
-        self.meta_page_id = btree.meta_page_id
+        self.btree = BPlusTree.create(bufmgr)
+        self.meta_page_id = self.btree.meta_page_id
 
     def insert(self, bufmgr: BufferPoolManager, pkey: bytes, record: list[bytes]) -> None:
         """
-        一意のインデックスにレコードを挿入します。
-        
+        一意インデックスにレコードを挿入する。
         :param bufmgr: バッファプールマネージャーのインスタンス
         :param pkey: プライマリキー
         :param record: 挿入するレコードのリスト
         """
         btree = self.btree
         skey = []
+        # skey に該当するフィールドのみをエンコード
         tuple.encode([record[index] for index in self.skey], skey)
-        btree.insert(bufmgr, skey, pkey)
+        btree.insert(bufmgr, bytes(skey), pkey)
     
     def show(self, bufmgr: BufferPoolManager):
-        try:            
+        try:
             btree = self.btree
-            iter = btree.search(bufmgr, SearchMode.Start())  # 修正箇所
-
-            if iter is None:
-                print("Iterator is None")
+            results = btree.search_range(bufmgr, b'', b'\xff' * 16)
+            if not results:
+                print("No records found.")
             else:
-                while iter is not None:
-                    result = iter.next(bufmgr)
-                    if result is None:
-                        print("No more records to display.")
-                        break
-
-                    key, value = result
+                for key, value in results:
                     record = []
                     tuple.decode(key, record)
                     tuple.decode(value, record)
                     print(tuple.Pretty(record))
             return True
-            
         except Exception as e:
             print(f"Error: {e}")
 
-
-# Tableクラスは、複数のUniqueIndexを持つテーブルを管理します。
 class Table:
     def __init__(self, meta_page_id: PageId = None, num_key_elems: int = 0, unique_indices: list[UniqueIndex] = None):
         """
-        Tableのコンストラクタ。
-        
         :param meta_page_id: メタページのID
-        :param num_key_elems: キーとして使用する要素の数
-        :param unique_indices: 一意のインデックスのリスト
+        :param num_key_elems: キーとして使用する要素数
+        :param unique_indices: 一意インデックスのリスト
         """
         self.meta_page_id = meta_page_id
         self.num_key_elems = num_key_elems
@@ -162,87 +126,63 @@ class Table:
 
     def create(self, bufmgr: BufferPoolManager) -> None:
         """
-        テーブルとその一意のインデックスを作成します。
-        
-        :param bufmgr: バッファプールマネージャーのインスタンス
+        テーブルと付随する一意インデックスを作成する。
         """
         btree = BPlusTree.create(bufmgr)
+        self.btree = btree
         self.meta_page_id = btree.meta_page_id
         for unique_index in self.unique_indices:
             unique_index.create(bufmgr)
 
     def show(self, bufmgr: BufferPoolManager):
-        try:            
+        try:
             btree = self.btree
-            iter = btree.search(bufmgr, SearchMode.Start())  # 修正箇所
-
-            if iter is None:
+            results = btree.search_range(bufmgr, b'', b'\xff' * 16)
+            if not results:
                 print("No records found in the table.")
             else:
-                while iter is not None:
-                    result = iter.next(bufmgr)
-                    if result is None:
-                        print("No more results")
-                        break
-
-                    key, value = result
+                for key, value in results:
                     record = []
                     tuple.decode(key, record)
                     tuple.decode(value, record)
                     print(tuple.Pretty(record))
             return True
-            
         except Exception as e:
             print(f"Error: {e}")
 
-
-    def insert(self, bufmgr: BufferPoolManager, record: list[list[bytes]]) -> None:
+    def insert(self, bufmgr: BufferPoolManager, record: list[bytes]) -> None:
         """
-        レコードをテーブルとその一意のインデックスに挿入します。
-        
-        :param bufmgr: バッファプールマネージャーのインスタンス
-        :param record: 挿入するレコードのリスト
+        テーブルとその一意インデックスにレコードを挿入する。
         """
-        btree = BPlusTree(self.meta_page_id)
+        btree = self.btree
         key = []
         tuple.encode(record[:self.num_key_elems], key)
         value = []
         tuple.encode(record[self.num_key_elems:], value)
         btree.insert(bufmgr, bytes(key), bytes(value))
         for unique_index in self.unique_indices:
-            unique_index.insert(bufmgr, key, record)
-
-# 以下にテスト関数を追加します。
+            unique_index.insert(bufmgr, bytes(key), record)
 
 def main() -> None:
-    """
-    テーブルの作成とレコードの挿入をテストします。
-    """
     try:
-        # ディスクマネージャを初期化
+        # ディスク、バッファプール、バッファプールマネージャの初期化
         disk = DiskManager.open("simple.rly")
-        # バッファプールを作成
         pool = BufferPool(10)
-        
-        # バッファプールマネージャを作成
         bufmgr = BufferPoolManager(disk, pool)
         
-        # SimpleTableのインスタンスを作成します。
+        # SimpleTable の作成
         table = SimpleTable(meta_page_id=PageId(0), num_key_elems=1)
-        
-        # テーブルを作成します。
         table.create(bufmgr)
         print(table)
         
-        # 複数のレコードをテーブルに挿入します。
+        # 複数のレコードを挿入
         table.insert(bufmgr, [b"z", b"Alice", b"Smith"])
         table.insert(bufmgr, [b"x", b"Bob", b"Johnson"])
         table.insert(bufmgr, [b"y", b"Charlie", b"Williams"])
         table.insert(bufmgr, [b"w", b"Dave", b"Miller"])
         table.insert(bufmgr, [b"v", b"Eve", b"Brown"])
         
-        # バッファをフラッシュします。
-
+        # バッファフラッシュ
         bufmgr.flush()
         print("test")
         table.show(bufmgr)
@@ -252,7 +192,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-
-

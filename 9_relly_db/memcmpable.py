@@ -1,4 +1,4 @@
-from typing import Iterator, List
+from typing import Iterator, List, Tuple
 
 # エスケープ長を定義します。
 ESCAPE_LENGTH = 9
@@ -31,20 +31,29 @@ def encode(src: bytes, dst: List[int]) -> None:
             break
         dst.append(ESCAPE_LENGTH)
 
-def decode(src: bytearray, dst: bytearray) -> None:
+def decode(src: bytes) -> Tuple[bytes, bytes]:
     """
-    エンコードされたデータをデコードして出力に追加します。
+    エンコードされたデータ src をデコードし、(decoded_element, remaining_bytes) を返す。
 
-    :param src: デコードするエンコード済みデータ
-    :param dst: デコードされたデータを格納するバイト配列
+    エンコード方式:
+      - データは ESCAPE_LENGTH バイト単位のブロックに分割され、
+        各ブロックの最後のバイトはそのブロックで実際に使用されたバイト数（ESCAPE_LENGTH未満の場合）または
+        ESCAPE_LENGTH（次ブロックが存在する場合）が格納される。
     """
-    while src:
-        extra = src[ESCAPE_LENGTH - 1]
-        length = min(ESCAPE_LENGTH - 1, extra)
-        dst.extend(src[:length])
-        del src[:ESCAPE_LENGTH]
-        if extra < ESCAPE_LENGTH:
+    decoded = bytearray()
+    i = 0
+    while i < len(src):
+        block = src[i:i+ESCAPE_LENGTH]
+        if len(block) < ESCAPE_LENGTH:
+            # 不完全なブロックがあれば終了
             break
+        marker = block[-1]
+        copy_len = marker if marker < ESCAPE_LENGTH else ESCAPE_LENGTH - 1
+        decoded.extend(block[:copy_len])
+        i += ESCAPE_LENGTH
+        if marker < ESCAPE_LENGTH:
+            break
+    return bytes(decoded), src[i:]
 
 def test():
     """
@@ -57,16 +66,13 @@ def test():
     encode(org1, enc)
     encode(org2, enc)
 
-    rest = bytearray(enc)
+    rest = bytes(enc)
 
-    dec1 = bytearray()
-    decode(rest, dec1)
-    assert org1 == bytes(dec1), "デコードされたデータが一致しません。"
+    dec1, rest = decode(rest)
 
-    dec2 = bytearray()
-    decode(rest, dec2)
-    assert org2 == bytes(dec2), "デコードされたデータが一致しません。"
-
+    assert org1 == dec1, "デコードされたデータが一致しません（org1）"
+    dec2, rest = decode(rest)
+    assert org2 == dec2, "デコードされたデータが一致しません（org2）"
     print("すべてのテストが成功しました。")
 
 if __name__ == "__main__":

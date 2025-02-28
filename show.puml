@@ -1,0 +1,18 @@
+participant App as Application / Table
+participant TB as SimpleTable
+participant BT as BPlusTree
+participant BPM as BufferPoolManager
+participant BP as BufferPool
+participant DM as DiskManager
+
+App->>TB: show()
+TB->>BT: BT.search_range(start, end)
+BT->>BPM: fetch_root_page()
+BPM->>BP: check page_table / fetch_page()
+alt ページがメモリにない場合
+    BPM->>DM: read_page_data(page_id)
+    DM-->>BPM: ページデータ返却
+end
+BT->>BT: search_range_internal(再帰的な範囲検索)
+BT-->>TB: 検索結果を返却
+TB->>App: 結果の表示（タプルのデコード・Pretty表示）
