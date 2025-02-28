@@ -1,3 +1,4 @@
+
 import sys
 import json
 import os
@@ -98,10 +99,9 @@ class QueryEngine:
         results = table.btree.search_range(self.bufmgr, b'', b'\xff'*16)
         filtered_results = []
 
-        # WHERE 句が指定されている場合、内部形式に変換
+        # WHERE 句が指定されている場合、ユーザー入力キーを内部形式にエンコードする
         if where_key is not None:
             encoded_where = []
-            # キーは1要素リストとしてエンコード
             tuple.encode([where_key.encode("utf-8")], encoded_where)
             where_key_encoded = bytes(encoded_where)
         else:
@@ -129,6 +129,63 @@ class QueryEngine:
     def flush(self):
         self.bufmgr.flush()
 
+    def show_btree(self, table_name):
+        """
+        B+Tree の状態を可視化する簡易ダンプを表示する（16進数出力）。
+        """
+        if table_name not in self.tables:
+            raise Exception(f"テーブル {table_name} は存在しません。")
+        table = self.tables[table_name]
+        root_buffer = table.btree.fetch_root_page(self.bufmgr)
+        print(f"B+Tree 状態 (テーブル: {table_name}):")
+        print(f"  Meta Page ID: {table.btree.meta_page_id.page_id}")
+        print("  Root Page (先頭 64バイト):")
+        print(root_buffer.page[:64].hex())
+
+    def show_page(self, page_id_int):
+        """
+        指定したページIDの内容を表示する。
+        """
+        try:
+            page_id = PageId(int(page_id_int))
+            buffer = self.bufmgr.fetch_page(page_id)
+            print(f"ページ {page_id_int} の内容 (16進数):")
+            print(buffer.page.hex())
+        except Exception as e:
+            print(f"ページ表示エラー: {e}")
+
+    def print_btree_ascii(self, table_name):
+        """
+        指定したテーブルのB+Tree構造をアスキーアートで表示する。
+        """
+        if table_name not in self.tables:
+            raise Exception(f"テーブル {table_name} は存在しません。")
+        table = self.tables[table_name]
+        print(f"B+Tree ASCII Art for table: {table_name}")
+        root_buffer = table.btree.fetch_root_page(self.bufmgr)
+        self._print_btree_node(root_buffer, table, "")
+
+    def _print_btree_node(self, node_buffer, table, indent):
+        """
+        再帰的にB+Treeのノードを表示するヘルパー関数。
+        
+        :param node_buffer: 現在のノードのバッファ
+        :param table: 対象テーブルの SimpleTable インスタンス
+        :param indent: 表示用のインデント文字列
+        """
+        node_type = struct.unpack('>I', node_buffer.page[:4])[0]
+        if node_type == 0:  # リーフノード
+            pairs = table.btree.get_pairs(node_buffer)
+            keys = [p.key.decode("utf-8", errors="replace") for p in pairs]
+            print(indent + "Leaf: " + " | ".join(keys))
+        else:
+            keys, children = table.btree.get_branch(node_buffer)
+            keys_str = [k.decode("utf-8", errors="replace") for k in keys]
+            print(indent + "Branch: " + " | ".join(keys_str))
+            for child in children:
+                child_buffer = self.bufmgr.fetch_page(child)
+                self._print_btree_node(child_buffer, table, indent + "    ")
+
     def run_shell(self):
         def print_help():
             print("===== DBMS Interactive Shell Help =====")
@@ -141,7 +198,6 @@ class QueryEngine:
             print("  DELETE FROM <table_name> WHERE key = <value>    (未実装)")
             print("  FLASH")
             print("  EXIT")
-            print("  dbmsfan   - DBMS オタク専用のサプライズメッセージを表示")
             print("========================================")
         
         print("===== DBMS Interactive Shell =====")
@@ -165,11 +221,43 @@ class QueryEngine:
             elif cmd_lower in ["help", "?"]:
                 print_help()
             
-            # 隠しコマンド：dbmsfan
+            # 隠しコマンド：dbmsfan（ヘルプには表示しない）
             elif cmd_lower == "dbmsfan":
                 print("★ DBMS FAN ★")
-                print("データベースは奥が深い！ディスクI/Oの遅延を打ち砕き、バッファプールで高速化を実現するその技術は、まさに現代の魔法だ！")
-                print("あなたは DBMS オタク！情熱を持って、データの未来を切り拓け！")
+                print("あなたはDBMSオタク！ディスクI/O、バッファ管理、B+Treeの神髄に魅了されし者よ、情熱を燃やせ！")
+            
+            # 隠しコマンド：show btree ascii <table_name>
+            elif cmd_lower.startswith("show btree ascii"):
+                parts = cmd.split()
+                if len(parts) < 4:
+                    print("Usage: SHOW BTREE ASCII <table_name>")
+                    continue
+                table_name = parts[3]
+                try:
+                    self.print_btree_ascii(table_name)
+                except Exception as e:
+                    print(f"エラー: {e}")
+            
+            # 隠しコマンド：show btree <table_name>
+            elif cmd_lower.startswith("show btree"):
+                parts = cmd.split()
+                if len(parts) < 3:
+                    print("Usage: SHOW BTREE <table_name>")
+                    continue
+                table_name = parts[2]
+                try:
+                    self.show_btree(table_name)
+                except Exception as e:
+                    print(f"エラー: {e}")
+            
+            # 隠しコマンド：show page <page_id>
+            elif cmd_lower.startswith("show page"):
+                parts = cmd.split()
+                if len(parts) < 3:
+                    print("Usage: SHOW PAGE <page_id>")
+                    continue
+                page_id_str = parts[2]
+                self.show_page(page_id_str)
             
             elif cmd_lower.startswith("create table"):
                 parts = cmd.split()
