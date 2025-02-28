@@ -55,6 +55,7 @@ class SearchMode:
         """特定のキーでの検索モードを返す"""
         return SearchMode(SearchMode.KEY, key)
 
+
 # キーと値のペア管理クラス
 class Pair:
     def __init__(self, key: bytes, value: bytes):
@@ -132,7 +133,7 @@ class BPlusTree:
 
         # 新しいB+ツリーのインスタンスを返す
         return BPlusTree(meta_page_id=meta_buffer.page_id)
-
+    
     def fetch_root_page(self, bufmgr: BufferPoolManager) -> Buffer: # meta_buffer.page[:8] = root_buffer.page_id.to_bytes() で保存したroot_buffer.page_idを取得する
         """
         ルートページを取得する
@@ -180,14 +181,15 @@ class BPlusTree:
             # リーフノードの場合、ペアを取得してキーを検索
             pairs = self.get_pairs(node_buffer)
             for pair in pairs:
-                if search_mode.key and pair.key == search_mode.key:
+                print(f"Pair key: {pair.key}, Search key: {search_mode.key}")
+                if search_mode.key is not None and pair.key == search_mode.key:
                     return pair.key, pair.value  # キーが一致した場合、キーと値を返す
             return None  # 見つからなかった場合
         else:
             # ブランチノードの場合、キーに基づいて適切な子ノードを選択
             keys, children = self.get_branch(node_buffer)
             for i, key in enumerate(keys):
-                if search_mode.key < key:
+                if search_mode.key is not None and search_mode.key < key:
                     # 指定されたキーが現在のキーより小さい場合、対応する子ノードに進む
                     child_page_id = children[i]
                     child_buffer = bufmgr.fetch_page(child_page_id)
@@ -196,6 +198,8 @@ class BPlusTree:
             child_page_id = children[-1]
             child_buffer = bufmgr.fetch_page(child_page_id)
             return self.search_internal(bufmgr, child_buffer, search_mode)
+
+
 
     def insert(self, bufmgr: BufferPoolManager, key: bytes, value: bytes) -> None:
         """
