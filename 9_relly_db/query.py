@@ -139,8 +139,8 @@ class QueryEngine:
         root_buffer = table.btree.fetch_root_page(self.bufmgr)
         print(f"B+Tree 状態 (テーブル: {table_name}):")
         print(f"  Meta Page ID: {table.btree.meta_page_id.page_id}")
-        print("  Root Page (先頭 64バイト):")
-        print(root_buffer.page[:64].hex())
+        print("  Root Page (全内容):")
+        print(root_buffer.page.hex())
 
     def show_page(self, page_id_int):
         """
